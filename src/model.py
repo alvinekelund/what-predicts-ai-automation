@@ -270,6 +270,139 @@ def train_tipping_models(
     return results
 
 
+def train_task_autonomy_models(
+    tasks: pd.DataFrame,
+    feature_cols: list[str] | None = None,
+) -> list[ModelResult]:
+    """Train regression models to predict task-level AI autonomy.
+
+    With ~3,000 tasks (10x more than occupation-level), this should achieve
+    meaningfully positive R² where the occupation model could not.
+    """
+    if feature_cols is None:
+        feature_cols = [
+            "human_education_years", "ai_education_years", "skill_compression",
+            "human_only_time", "human_with_ai_time", "time_ratio",
+            "success_rate", "human_only_ability_pct", "multitasking_pct",
+            "use_case_work", "use_case_personal", "use_case_coursework",
+            "conversation_count",
+        ]
+
+    X, y, used_features = _prepare_features(
+        tasks, feature_cols, target_col="ai_autonomy_mean"
+    )
+
+    if len(X) < 50:
+        raise ValueError(f"Too few samples ({len(X)}) for task-level modeling.")
+
+    results = []
+
+    # XGBoost
+    xgb = XGBRegressor(
+        n_estimators=300, max_depth=5, learning_rate=0.05,
+        subsample=0.8, colsample_bytree=0.8, random_state=42,
+    )
+    xgb.fit(X, y)
+    preds = xgb.predict(X)
+    cv = cross_val_score(xgb, X, y, cv=5, scoring="r2")
+
+    results.append(ModelResult(
+        name="XGBoost",
+        target="ai_autonomy_mean",
+        metrics={
+            "r2_train": r2_score(y, preds),
+            "r2_cv_mean": cv.mean(),
+            "r2_cv_std": cv.std(),
+            "mae": mean_absolute_error(y, preds),
+            "rmse": np.sqrt(mean_squared_error(y, preds)),
+        },
+        feature_importance=pd.DataFrame({
+            "feature": used_features, "importance": xgb.feature_importances_,
+        }).sort_values("importance", ascending=False),
+        predictions=pd.Series(preds, index=X.index),
+        cv_scores=cv,
+        model=xgb,
+    ))
+
+    # Gradient Boosting
+    gbr = GradientBoostingRegressor(
+        n_estimators=300, max_depth=4, learning_rate=0.05,
+        subsample=0.8, random_state=42,
+    )
+    gbr.fit(X, y)
+    preds = gbr.predict(X)
+    cv = cross_val_score(gbr, X, y, cv=5, scoring="r2")
+
+    results.append(ModelResult(
+        name="GradientBoosting",
+        target="ai_autonomy_mean",
+        metrics={
+            "r2_train": r2_score(y, preds),
+            "r2_cv_mean": cv.mean(),
+            "r2_cv_std": cv.std(),
+            "mae": mean_absolute_error(y, preds),
+            "rmse": np.sqrt(mean_squared_error(y, preds)),
+        },
+        feature_importance=pd.DataFrame({
+            "feature": used_features, "importance": gbr.feature_importances_,
+        }).sort_values("importance", ascending=False),
+        predictions=pd.Series(preds, index=X.index),
+        cv_scores=cv,
+        model=gbr,
+    ))
+
+    return results
+
+
+def train_time_savings_models(
+    tasks: pd.DataFrame,
+    feature_cols: list[str] | None = None,
+) -> list[ModelResult]:
+    """Train regression models to predict time savings ratio per task."""
+    if feature_cols is None:
+        feature_cols = [
+            "ai_autonomy_mean", "human_education_years", "ai_education_years",
+            "skill_compression", "success_rate", "human_only_ability_pct",
+            "multitasking_pct", "use_case_work", "conversation_count",
+        ]
+
+    X, y, used_features = _prepare_features(
+        tasks, feature_cols, target_col="time_ratio"
+    )
+
+    if len(X) < 50:
+        raise ValueError(f"Too few samples ({len(X)}).")
+
+    results = []
+
+    xgb = XGBRegressor(
+        n_estimators=300, max_depth=5, learning_rate=0.05,
+        subsample=0.8, colsample_bytree=0.8, random_state=42,
+    )
+    xgb.fit(X, y)
+    preds = xgb.predict(X)
+    cv = cross_val_score(xgb, X, y, cv=5, scoring="r2")
+
+    results.append(ModelResult(
+        name="XGBoost",
+        target="time_ratio",
+        metrics={
+            "r2_train": r2_score(y, preds),
+            "r2_cv_mean": cv.mean(),
+            "r2_cv_std": cv.std(),
+            "mae": mean_absolute_error(y, preds),
+        },
+        feature_importance=pd.DataFrame({
+            "feature": used_features, "importance": xgb.feature_importances_,
+        }).sort_values("importance", ascending=False),
+        predictions=pd.Series(preds, index=X.index),
+        cv_scores=cv,
+        model=xgb,
+    ))
+
+    return results
+
+
 def rank_tipping_candidates(
     features: pd.DataFrame,
     model_result: ModelResult,

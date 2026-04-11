@@ -162,6 +162,52 @@ def load_task_penetration() -> pd.DataFrame:
     return _clean_columns(load_csv("task_penetration"))
 
 
+def load_onet_skills() -> pd.DataFrame:
+    """Load O*NET skill importance ratings per occupation.
+
+    Downloads Skills.xlsx from the O*NET 30.2 database and pivots to
+    one row per SOC code with a column per skill (importance score).
+    """
+    import io
+    import zipfile
+    import requests
+
+    cache_path = DATA_DIR / "onet_skills_pivoted.csv"
+    if cache_path.exists():
+        return pd.read_csv(cache_path)
+
+    url = "https://www.onetcenter.org/dl_files/database/db_30_2_text/Skills.txt"
+    logger.info("Downloading O*NET Skills from %s", url)
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    df = pd.read_csv(io.StringIO(resp.text), sep="\t")
+
+    # Keep only importance (IM) scale, take Data Value
+    skills = df[df["Scale ID"] == "IM"][
+        ["O*NET-SOC Code", "Element Name", "Data Value"]
+    ].copy()
+    skills.columns = ["onet_soc_code", "skill", "importance"]
+    skills["soc_code"] = skills["onet_soc_code"].str[:7]
+
+    # Average across detailed SOC codes within the same 7-digit code
+    skills = skills.groupby(["soc_code", "skill"])["importance"].mean().reset_index()
+
+    # Pivot to one row per soc_code
+    pivoted = skills.pivot_table(
+        index="soc_code", columns="skill", values="importance"
+    ).reset_index()
+    pivoted.columns.name = None
+
+    # Clean column names
+    pivoted.columns = [
+        c if c == "soc_code"
+        else "skill_" + c.lower().replace(" ", "_").replace("-", "_")
+        for c in pivoted.columns
+    ]
+    pivoted.to_csv(cache_path, index=False)
+    return pivoted
+
+
 # ---------------------------------------------------------------------------
 # Extraction from unified-schema releases
 # ---------------------------------------------------------------------------
@@ -238,6 +284,191 @@ def extract_task_counts_from_unified(df: pd.DataFrame) -> pd.DataFrame:
     subset = df.loc[mask, ["cluster_name", "value"]].copy()
     subset = subset.rename(columns={"cluster_name": "task_name", "value": "conversation_count"})
     return subset.reset_index(drop=True)
+
+
+def _extract_continuous_facet(
+    df: pd.DataFrame,
+    facet: str,
+    variable: str,
+) -> pd.DataFrame:
+    """Extract a continuous per-task measure (education, time, autonomy).
+
+    These facets have cluster_name format 'task_name::value' and we just
+    need the single numeric value per task.
+    """
+    mask = (df["facet"] == facet) & (df["variable"] == variable) & (df["geography"] == "global")
+    subset = df.loc[mask, ["cluster_name", "value"]].copy()
+    if subset.empty:
+        return pd.DataFrame(columns=["task_name", "value"])
+    subset["task_name"] = subset["cluster_name"].str.replace("::value", "", regex=False)
+    return subset[["task_name", "value"]].reset_index(drop=True)
+
+
+def extract_education_years_from_unified(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract human and AI education years (mean) per task."""
+    human = _extract_continuous_facet(
+        df, "onet_task::human_education_years", "onet_task_human_education_years_mean"
+    ).rename(columns={"value": "human_education_years"})
+    ai = _extract_continuous_facet(
+        df, "onet_task::ai_education_years", "onet_task_ai_education_years_mean"
+    ).rename(columns={"value": "ai_education_years"})
+
+    if human.empty or ai.empty:
+        return pd.DataFrame()
+    return human.merge(ai, on="task_name", how="inner")
+
+
+def extract_time_estimates_from_unified(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract human-only and human-with-AI time estimates (mean) per task."""
+    h_only = _extract_continuous_facet(
+        df, "onet_task::human_only_time", "onet_task_human_only_time_mean"
+    ).rename(columns={"value": "human_only_time"})
+    h_ai = _extract_continuous_facet(
+        df, "onet_task::human_with_ai_time", "onet_task_human_with_ai_time_mean"
+    ).rename(columns={"value": "human_with_ai_time"})
+
+    if h_only.empty or h_ai.empty:
+        return pd.DataFrame()
+    return h_only.merge(h_ai, on="task_name", how="inner")
+
+
+def extract_human_only_ability_from_unified(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract percentage of conversations requiring uniquely human ability per task."""
+    pivot = _extract_facet(df, "onet_task::human_only_ability", "onet_task_human_only_ability_pct")
+    if pivot.empty:
+        return pd.DataFrame()
+    pivot["human_only_ability_pct"] = pivot.get("yes", 0) / 100.0
+    return pivot[["task_name", "human_only_ability_pct"]].copy()
+
+
+def extract_multitasking_from_unified(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract percentage of conversations involving multitasking per task."""
+    pivot = _extract_facet(df, "onet_task::multitasking", "onet_task_multitasking_pct")
+    if pivot.empty:
+        return pd.DataFrame()
+    pivot["multitasking_pct"] = pivot.get("yes", 0) / 100.0
+    return pivot[["task_name", "multitasking_pct"]].copy()
+
+
+def extract_use_case_from_unified(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract use-case distribution (work/personal/coursework) per task."""
+    pivot = _extract_facet(df, "onet_task::use_case", "onet_task_use_case_pct")
+    if pivot.empty:
+        return pd.DataFrame()
+    for col in ["work", "personal", "coursework"]:
+        if col in pivot.columns:
+            pivot[f"use_case_{col}"] = pivot[col] / 100.0
+        else:
+            pivot[f"use_case_{col}"] = 0.0
+    return pivot[["task_name", "use_case_work", "use_case_personal", "use_case_coursework"]].copy()
+
+
+def build_task_feature_matrix(release: str = "2026_03") -> pd.DataFrame:
+    """Build a comprehensive task-level feature matrix from a single release.
+
+    Returns one row per task (~3,259 tasks) with:
+    - Collaboration mode shares (directive, feedback_loop, etc.)
+    - AI autonomy score
+    - Human and AI education years + skill compression delta
+    - Time estimates + speedup ratio
+    - Task success rate
+    - Human-only ability percentage
+    - Multitasking percentage
+    - Use-case distribution
+    - Conversation count
+    - Mapped SOC code and occupation title
+    """
+    raw = load_unified_release(release, platform="claude_ai")
+
+    # Core: collaboration modes
+    collab = extract_collaboration_from_unified(raw)
+
+    # Continuous measures
+    autonomy = _extract_continuous_facet(
+        raw, "onet_task::ai_autonomy", "onet_task_ai_autonomy_mean"
+    ).rename(columns={"value": "ai_autonomy_mean"})
+
+    education = extract_education_years_from_unified(raw)
+    time_est = extract_time_estimates_from_unified(raw)
+
+    # Categorical measures
+    success = extract_task_success_from_unified(raw)
+    if not success.empty:
+        success = success[["task_name", "success_rate"]].copy()
+
+    human_ability = extract_human_only_ability_from_unified(raw)
+    multitask = extract_multitasking_from_unified(raw)
+    use_case = extract_use_case_from_unified(raw)
+
+    # Conversation counts
+    counts = extract_task_counts_from_unified(raw)
+
+    # Join everything on task_name
+    # Start from autonomy (most complete: 3,259 tasks)
+    tasks = autonomy.copy()
+    for other in [education, time_est, success, human_ability, multitask, use_case, counts]:
+        if other is not None and not other.empty:
+            tasks = tasks.merge(other, on="task_name", how="left")
+
+    # Add collaboration modes (these have more rows due to task::mode format)
+    if not collab.empty:
+        collab["task_name"] = collab["task_name"].str.lower().str.strip()
+        tasks["task_name"] = tasks["task_name"].str.lower().str.strip()
+        mode_cols = [c for c in collab.columns if c != "task_name"]
+        tasks = tasks.merge(collab[["task_name"] + mode_cols], on="task_name", how="left")
+
+    # Compute derived features
+    if "human_education_years" in tasks.columns and "ai_education_years" in tasks.columns:
+        tasks["skill_compression"] = tasks["human_education_years"] - tasks["ai_education_years"]
+
+    if "human_only_time" in tasks.columns and "human_with_ai_time" in tasks.columns:
+        tasks["time_ratio"] = tasks["human_with_ai_time"] / tasks["human_only_time"].clip(lower=0.01)
+        tasks["time_multiplier"] = tasks["human_only_time"] / tasks["human_with_ai_time"].clip(lower=0.01)
+
+    # Compute automation share from collaboration modes
+    auto_modes = [m for m in AUTOMATION_MODES if m in tasks.columns]
+    aug_modes = [m for m in AUGMENTATION_MODES if m in tasks.columns]
+    if auto_modes:
+        tasks["automation_share"] = tasks[auto_modes].fillna(0).sum(axis=1)
+    if aug_modes:
+        tasks["augmentation_share"] = tasks[aug_modes].fillna(0).sum(axis=1)
+
+    # Map to occupations via SOC codes
+    task_to_soc = _build_task_to_soc()
+    task_to_soc["task_name"] = task_to_soc["task_name"].str.lower().str.strip()
+    tasks["task_name"] = tasks["task_name"].str.lower().str.strip()
+    tasks = tasks.merge(task_to_soc, on="task_name", how="left")
+
+    return tasks
+
+
+def build_task_feature_matrix_api(release: str = "2026_03") -> pd.DataFrame:
+    """Build a task-level feature matrix from the API platform for comparison."""
+    raw = load_unified_release(release, platform="api")
+
+    autonomy = _extract_continuous_facet(
+        raw, "onet_task::ai_autonomy", "onet_task_ai_autonomy_mean"
+    ).rename(columns={"value": "ai_autonomy_mean_api"})
+
+    collab = extract_collaboration_from_unified(raw)
+    if not collab.empty:
+        collab["task_name"] = collab["task_name"].str.lower().str.strip()
+        for m in AUTOMATION_MODES:
+            if m in collab.columns:
+                collab = collab.rename(columns={m: f"{m}_api"})
+        for m in AUGMENTATION_MODES:
+            if m in collab.columns:
+                collab = collab.rename(columns={m: f"{m}_api"})
+        auto_cols = [f"{m}_api" for m in AUTOMATION_MODES if f"{m}_api" in collab.columns]
+        if auto_cols:
+            collab["automation_share_api"] = collab[auto_cols].fillna(0).sum(axis=1)
+
+    autonomy["task_name"] = autonomy["task_name"].str.lower().str.strip()
+    result = autonomy.copy()
+    if not collab.empty:
+        api_cols = ["task_name"] + [c for c in collab.columns if c.endswith("_api")]
+        result = result.merge(collab[api_cols], on="task_name", how="left")
+    return result
 
 
 # ---------------------------------------------------------------------------

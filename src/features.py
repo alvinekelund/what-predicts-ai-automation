@@ -19,7 +19,10 @@ import pandas as pd
 from .data import (
     RELEASE_ORDER,
     build_occupation_panel,
+    build_task_feature_matrix,
+    build_task_feature_matrix_api,
     load_unified_release,
+    load_onet_skills,
     extract_autonomy_from_unified,
     extract_task_success_from_unified,
     extract_task_counts_from_unified,
@@ -227,3 +230,88 @@ def build_feature_matrix(apply_quality_filter: bool = True) -> pd.DataFrame:
             )
 
     return features.reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Task-level feature engineering
+# ---------------------------------------------------------------------------
+
+
+def build_task_analysis_matrix() -> pd.DataFrame:
+    """Build the enriched task-level feature matrix for analysis.
+
+    Returns ~3,259 tasks with all available measures plus derived features:
+    - skill_compression: human_education_years - ai_education_years
+    - time_ratio: human_with_ai_time / human_only_time (< 1 = AI speeds up)
+    - automation_share: directive + feedback_loop share
+    - O*NET skill profiles merged via SOC code
+    """
+    tasks = build_task_feature_matrix()
+
+    # Add O*NET skills per occupation (joined via soc_code)
+    try:
+        skills = load_onet_skills()
+        skill_cols = [c for c in skills.columns if c.startswith("skill_")]
+        tasks = tasks.merge(skills, on="soc_code", how="left")
+    except Exception:
+        skill_cols = []
+
+    # Add major group for grouping
+    if "soc_code" in tasks.columns:
+        tasks["major_group"] = tasks["soc_code"].astype(str).str[:2]
+
+    return tasks
+
+
+def compute_platform_gap() -> pd.DataFrame:
+    """Compute per-task difference between API and Claude.ai platforms.
+
+    Returns tasks with both platform measures and the gap columns.
+    """
+    claude = build_task_feature_matrix("2026_03")
+    api = build_task_feature_matrix_api("2026_03")
+
+    claude_cols = ["task_name", "ai_autonomy_mean", "automation_share"]
+    claude_sub = claude[[c for c in claude_cols if c in claude.columns]].copy()
+    claude_sub["task_name"] = claude_sub["task_name"].str.lower().str.strip()
+
+    api["task_name"] = api["task_name"].str.lower().str.strip()
+
+    merged = claude_sub.merge(api, on="task_name", how="inner", suffixes=("_claude", "_api"))
+
+    if "ai_autonomy_mean" in merged.columns and "ai_autonomy_mean_api" in merged.columns:
+        merged["autonomy_gap"] = merged["ai_autonomy_mean_api"] - merged["ai_autonomy_mean"]
+    if "automation_share" in merged.columns and "automation_share_api" in merged.columns:
+        merged["automation_gap"] = merged["automation_share_api"] - merged["automation_share"]
+
+    return merged
+
+
+def compute_within_occupation_heterogeneity(tasks: pd.DataFrame) -> pd.DataFrame:
+    """Compute within-occupation variance of task-level AI autonomy.
+
+    Returns one row per occupation with heterogeneity measures:
+    - autonomy_std: standard deviation of task autonomy within occupation
+    - autonomy_range: max - min task autonomy within occupation
+    - n_tasks: number of tasks in occupation
+    """
+    if "ai_autonomy_mean" not in tasks.columns or "soc_code" not in tasks.columns:
+        return pd.DataFrame()
+
+    valid = tasks.dropna(subset=["ai_autonomy_mean", "soc_code"]).copy()
+
+    het = (
+        valid.groupby(["soc_code", "title"])
+        .agg(
+            autonomy_mean=("ai_autonomy_mean", "mean"),
+            autonomy_std=("ai_autonomy_mean", "std"),
+            autonomy_min=("ai_autonomy_mean", "min"),
+            autonomy_max=("ai_autonomy_mean", "max"),
+            n_tasks=("task_name", "nunique"),
+        )
+        .reset_index()
+    )
+    het["autonomy_range"] = het["autonomy_max"] - het["autonomy_min"]
+    het["autonomy_std"] = het["autonomy_std"].fillna(0)
+
+    return het

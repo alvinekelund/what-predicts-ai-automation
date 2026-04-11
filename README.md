@@ -1,68 +1,66 @@
 # The Jagged Adoption Frontier
 
-**An empirical analysis of Anthropic's Economic Index: what predicts whether AI augments or automates an occupation?**
+**Where does AI automate — and where does it augment? A task-level analysis of 3,259 occupational tasks using Anthropic's Economic Index.**
 
-An honest investigation using 12 months of [Anthropic Economic Index](https://www.anthropic.com/economic-index) data across 319 quality-filtered occupations. The answer: less than you'd think.
+The standard approach in AI labor economics analyzes automation at the occupation level. This project shows why that fails: tasks within the same occupation have wildly different automation patterns. By moving the analysis to the **task level**, we recover predictive signal that occupation-level aggregation destroys.
+
+![Skill Compression vs Automation](figures/05_skill_compression_vs_automation.png)
 
 ## Key Findings
 
-### 1. Most AI use remains augmentative
+### 1. The signal lives at task level, not occupation level
 
-After filtering to occupations with reliable data (>=200 conversations, >=3 tasks, >=3 releases), the vast majority of AI use on Claude is collaborative rather than autonomous. Only a small fraction of occupations are automation-dominant.
+Predicting automation trajectories at the occupation level yields R^2 ~ 0 after proper cross-validation. But predicting AI autonomy at the task level yields **R^2 = 0.29** (5-fold CV, n = 3,259 tasks). The 10x increase in observations and the use of continuous outcome variables recovers real signal.
 
-### 2. Mean reversion dominates trajectories
+### 2. AI Skill Compression predicts automation
 
-The single strongest signal in the data: occupations that start with high automation shares tend to *decelerate*, while those starting low tend to *accelerate*. This convergence toward the mean means naive "more automation begets more automation" predictions are wrong.
+We introduce *skill compression* — the gap between how many years of education a human needs for a task vs. how much equivalent training the AI needs. Tasks with higher skill compression (AI needs less education) show significantly more automation (r = 0.21, p < 10^-33). But these tasks also show *lower* AI autonomy — suggesting AI democratizes access rather than replacing humans.
 
-### 3. The frontier is genuinely jagged
+![Skill Compression Distribution](figures/04_skill_compression_distribution.png)
 
-Wage — the most common proxy for task complexity — explains almost nothing about which occupations automate. The adoption frontier is jagged and unpredictable from simple economic proxies, echoing Dell'Acqua et al.'s (2023) finding.
+### 3. Platform determines automation mode
 
-### 4. The channel matters more than the occupation
+The same task looks very different on API vs. Claude.ai. Across 2,429 matched tasks, API automation share averages **+25 percentage points** higher than Claude.ai. The deployment channel matters far more than the occupation.
 
-API usage (programmatic pipelines) is dramatically more automative than interactive Claude.ai usage. The same occupation looks very different depending on whether humans are using Claude conversationally or embedding it in automated workflows.
+![Platform Divergence](figures/09_platform_divergence.png)
 
-### 5. Individual trajectories are hard to predict
+### 4. Task success inversely predicts automation
 
-Our best velocity model achieves **R^2 ~ 0** after proper cross-validation — individual occupation automation trajectories are essentially unpredictable from current features. Direction classification achieves a modest **AUC ~ 0.71**, enough to identify associated features but not enough for reliable prediction. Only **3 occupations** genuinely tipped from augmentation to automation during the observation window.
+The strongest single correlation in the data: tasks with lower measured success rates have higher automation shares (r = -0.44, p < 10^-100). Automated (directive) tasks involve less human quality control, making success harder to verify.
 
-## Why the honest null result matters
+### 5. O\*NET skills predict automation resistance
 
-A project that claims "we can predict automation with R^2 = 0.33" by overfitting to noisy data helps no one. The honest finding — that occupation-level automation trajectories are hard to predict — is itself important:
+Occupation-level skill profiles from O\*NET — particularly complex problem solving, critical thinking, and social perceptiveness — predict which occupations resist automation better than wage does.
 
-- It suggests the augmentation-to-automation transition depends on idiosyncratic factors (individual behavior, organizational decisions, specific tool availability) more than on occupation-level characteristics
-- It challenges deterministic narratives about which jobs AI will automate
-- It highlights that **how** AI is deployed (API vs. interactive) matters more than **where** it's deployed
+![Skills vs Automation](figures/13_skills_vs_automation.png)
+
+### 6. Within-occupation heterogeneity explains the null result
+
+The occupation-level null result is not noise — it's a *finding*. Tasks within the same occupation have wildly different AI autonomy scores. This within-occupation variance directly causes the occupation-level prediction failure and quantifies the "jagged frontier" from Dell'Acqua et al. (2023).
+
+![Within-Occupation Heterogeneity](figures/11_within_occupation_heterogeneity.png)
 
 ## Data
 
-All data is publicly available and downloaded automatically when running the notebooks.
+All data is publicly available and downloaded automatically.
 
 | Source | Description |
 |--------|-------------|
-| [Anthropic Economic Index](https://huggingface.co/datasets/Anthropic/EconomicIndex) | 4 releases (Mar 2025 -- Mar 2026) with per-task collaboration modes, AI autonomy, task success rates |
-| [O\*NET](https://www.onetonline.org/) | 19,530 task statements mapped to 974 occupations via SOC codes |
+| [Anthropic Economic Index](https://huggingface.co/datasets/Anthropic/EconomicIndex) | 4 releases (Mar 2025 -- Mar 2026): per-task AI autonomy, education years, time estimates, collaboration modes, success rates |
+| [O\*NET](https://www.onetonline.org/) | 19,530 task statements mapped to 974 occupations + 35 skill ratings per occupation |
 | [BLS OEWS](https://www.bls.gov/oes/) | Wage and employment data by occupation |
-
-The Anthropic Economic Index classifies every Claude conversation into one of five collaboration modes:
-
-| Mode | Category | Description |
-|------|----------|-------------|
-| **Directive** | Automation | AI executes autonomously |
-| **Feedback loop** | Automation | Iterative AI-driven refinement |
-| **Validation** | Augmentation | Human validates AI output |
-| **Task iteration** | Augmentation | Human iterates on AI drafts |
-| **Learning** | Augmentation | Human learns from AI |
 
 ## Methodology
 
-**Quality filtering.** Raw data covers 633 occupations, but only ~319 have sufficient data for reliable analysis. We require >=200 conversations, >=3 matched O\*NET tasks, and data in >=3 of 4 releases. This eliminates noise from occupations like "Dancers" (17 conversations, 1 task).
+**Task-level analysis.** Rather than aggregating to occupations (which destroys signal), we analyze 3,259 unique tasks with rich continuous measures: AI autonomy scores, human and AI education year estimates, time estimates, task success rates, collaboration mode distributions, and human-only ability fractions.
 
-**Panel construction.** Task-level collaboration mode shares are mapped to occupations via O\*NET SOC codes across four releases. For each occupation x release, we compute the share of automative vs. augmentative AI use.
+**Skill compression.** For each task, we compute `human_education_years - ai_education_years`. This novel metric quantifies how much AI reduces the expertise barrier for specific tasks.
 
-**Feature engineering.** Per occupation: automation velocity (polyfit slope), initial collaboration mode distribution, task characteristics (count, concentration, success rate), and economic characteristics (wage, job zone, AI exposure).
+**Predictive modeling.** XGBoost and Gradient Boosting models predict task-level AI autonomy from task characteristics. Cross-validated R^2 = 0.29 — modest but real, compared to R^2 ~ 0 at the occupation level.
 
-**Modeling.** XGBoost, Gradient Boosting, Logistic Regression, and Random Forest models, validated via 5-fold CV. Features from early releases, targets from the full time series.
+**Platform comparison.** We compare the same tasks across Claude.ai (interactive) and API (programmatic) platforms, measuring per-task automation divergence.
+
+**Skill profiling.** O\*NET skill importance ratings (35 skills per occupation) are used to identify which occupational skill profiles predict automation resistance.
 
 ## Project Structure
 
@@ -70,17 +68,18 @@ The Anthropic Economic Index classifies every Claude conversation into one of fi
 ├── README.md
 ├── requirements.txt
 ├── notebooks/
-│   ├── 01_data_acquisition.ipynb   # Download, quality assessment, API vs Claude.ai
-│   ├── 02_exploration.ipynb        # Mean reversion, jagged frontier, occupation groups
-│   ├── 03_modeling.ipynb           # Model training with honest evaluation
-│   └── 04_analysis.ipynb          # Tipping candidates, synthesis, final rankings
+│   ├── 01_data_acquisition.ipynb   # Download, quality assessment, variable richness
+│   ├── 02_skill_compression.ipynb  # AI Skill Compression metric and analysis
+│   ├── 03_task_level_analysis.ipynb # Predictive models, platform gap, correlations
+│   ├── 04_jagged_frontier.ipynb    # Within-occupation heterogeneity, O*NET skills
+│   └── 05_synthesis.ipynb          # Aggregation, tipping candidates, summary
 ├── src/
-│   ├── data.py                     # Data download, loading, panel construction
-│   ├── features.py                 # Feature engineering with quality filtering
-│   └── model.py                    # Model training, evaluation, ranking
+│   ├── data.py                     # Data download, loading, task feature matrix
+│   ├── features.py                 # Feature engineering (task + occupation level)
+│   └── model.py                    # Predictive models (task + occupation level)
 ├── data/
 │   └── README.md                   # Data source documentation
-└── figures/                        # Generated visualizations (14 figures)
+└── figures/                        # 16 generated visualizations
 ```
 
 ## Reproducing
@@ -91,22 +90,23 @@ cd AI-vin-Index
 pip install -r requirements.txt
 ```
 
-Run the notebooks in order — data downloads automatically on first execution:
+Run the notebooks in order — data downloads automatically:
 
 ```bash
 jupyter nbconvert --execute notebooks/01_data_acquisition.ipynb --to notebook
-jupyter nbconvert --execute notebooks/02_exploration.ipynb --to notebook
-jupyter nbconvert --execute notebooks/03_modeling.ipynb --to notebook
-jupyter nbconvert --execute notebooks/04_analysis.ipynb --to notebook
+jupyter nbconvert --execute notebooks/02_skill_compression.ipynb --to notebook
+jupyter nbconvert --execute notebooks/03_task_level_analysis.ipynb --to notebook
+jupyter nbconvert --execute notebooks/04_jagged_frontier.ipynb --to notebook
+jupyter nbconvert --execute notebooks/05_synthesis.ipynb --to notebook
 ```
 
 ## References
 
 - Anthropic. (2025--2026). *The Anthropic Economic Index.* [anthropic.com/economic-index](https://www.anthropic.com/economic-index)
 - Dell'Acqua, F., et al. (2023). *Navigating the Jagged Technological Frontier.* Harvard Business School Working Paper 24-013.
+- Eloundou, T., Manning, S., Mishkin, P., & Rock, D. (2023). *GPTs are GPTs.* arXiv:2303.10130.
 - Acemoglu, D. (2024). *The Simple Macroeconomics of AI.* NBER Working Paper 32487.
 - Brynjolfsson, E., Li, D., & Raymond, L. R. (2023). *Generative AI at Work.* NBER Working Paper 31161.
-- Eloundou, T., Manning, S., Mishkin, P., & Rock, D. (2023). *GPTs are GPTs.* arXiv:2303.10130.
 
 ## License
 
