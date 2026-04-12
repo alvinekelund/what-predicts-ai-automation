@@ -28,11 +28,11 @@ The model is the same. What changes is the deployment context. When a task is em
 
 ![Platform gap](figures/05_platform_gap.png)
 
-### 3. Occupation-level prediction fails because tasks within occupations vary widely
+### 3. "Will AI automate this job?" is the wrong question
 
-Tasks within a single occupation range from fully automated to fully augmented. Among 319 occupations with 5+ tasks, the median within-occupation range in AI autonomy score is 0.64 points on a 1–5 scale. Word Processors and Typists — a single occupation — contains tasks spanning an autonomy range of 1.8 points.
+The chart below shows two occupations. In each, some tasks are heavily automated (red) and others barely touched (blue) — within the same job title. Word Processors and Typists ranges from "answer telephones" at 3% automation to "use data entry devices" at 71%. First-Line Supervisors ranges from "analyze financial activities" at 7% to "compute figures such as balances and totals" at 78%.
 
-This is why "will AI automate occupation X?" is under-specified. The answer depends on *which tasks* within that occupation you ask about.
+This pattern holds broadly: among 319 occupations with 5+ tasks, the median within-occupation range in AI autonomy is 0.64 points on a 1–5 scale. The right unit of analysis is the task, not the occupation.
 
 ![Within-occupation variation](figures/06_within_occupation.png)
 
