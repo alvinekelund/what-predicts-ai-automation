@@ -2,49 +2,63 @@
 
 **What determines whether people use AI as an autonomous tool or as a collaborator?**
 
-Using Anthropic's [Economic Index](https://www.anthropic.com/economic-index) — which classifies a sample of Claude conversations by O\*NET occupational task and collaboration mode — we analyze 3,259 tasks to understand the structure of AI adoption. Three patterns emerge.
+Anthropic's [Economic Index](https://www.anthropic.com/economic-index) classifies a sample of Claude conversations by O\*NET occupational task and collaboration mode. Using the March 2026 release (3,259 tasks, 425K rows), we find that AI automation is not driven by skill level — it is driven by what the task produces and how the AI is deployed.
 
 ## Findings
 
-### 1. Output type predicts automation; education does not
+### 1. What the task produces matters. Education does not.
 
-Tasks that produce **artifacts** (reports, transcripts, data transformations) are automated at roughly twice the rate of tasks that require **human interaction** (advising, teaching, negotiating). Education requirements have no measurable effect — high-education and low-education tasks automate at the same rate.
+The most common assumption about AI and work is that low-skill, routine tasks get automated first. In this data, education requirements have **zero predictive power** over automation share (r = −0.009, p = 0.64). Tasks requiring 8 years of education automate at the same rate as tasks requiring 16.
 
-![Education vs Output Type](figures/04_task_categories.png)
+What *does* predict automation is the nature of the output. Tasks that produce **artifacts** — reports, transcripts, data transformations — are automated at 35%. Tasks that require **human interaction** — advising, teaching, negotiating — are automated at 17%. This 18pp gap is large (Cohen's d = 0.89, p < 10⁻²⁶) and holds within every education quartile.
 
-### 2. Deployment context swings automation more than the task itself
+![Education does not predict automation](figures/02_education_vs_automation.png)
 
-The same O\*NET task shows radically different automation rates on the API (programmatic) vs. Claude.ai (interactive). Across 2,429 matched tasks, the API averages +25pp higher automation. Some tasks go from 0% automated on Claude.ai to 100% on API. The model is the same — what changes is how organizations deploy it.
+The gradient is smooth across finer task categories. Data entry and transcription tasks automate at 36%. Content creation at 33%. At the other end: evaluation and judgment at 21%, human interaction at 17%.
 
-![Platform Gap](figures/05_platform_gap.png)
+![Automation by task category](figures/04_task_categories.png)
 
-### 3. Tasks within the same occupation span the full spectrum
+Concretely: "transcribe recorded proceedings" is 86% automated. "Explain exercise program to participants" is 0%. Both require similar education. They differ in whether the output is a document or a conversation.
 
-Tasks within a single occupation range from fully automated to fully augmented. This within-occupation variation is why occupation-level prediction fails and why "will AI automate X?" is the wrong question.
+### 2. Deployment swings automation more than the task itself
 
-![Within-Occupation Variation](figures/06_within_occupation.png)
+The same O\*NET task shows radically different automation rates depending on whether people access Claude via the **API** (programmatic, embedded in pipelines) or **Claude.ai** (interactive, conversational). Across 2,429 matched tasks, API automation averages 57% vs. 32% on Claude.ai — a 25 percentage point gap. 44 tasks go from under 5% automated on Claude.ai to over 90% on API.
+
+The model is the same. What changes is the deployment context. When a task is embedded in an automated pipeline, it becomes directive by construction.
+
+![Platform gap](figures/05_platform_gap.png)
+
+### 3. Occupation-level prediction fails because tasks within occupations vary widely
+
+Tasks within a single occupation range from fully automated to fully augmented. Among 319 occupations with 5+ tasks, the median within-occupation range in AI autonomy score is 0.64 points on a 1–5 scale. Word Processors and Typists — a single occupation — contains tasks spanning an autonomy range of 1.8 points.
+
+This is why "will AI automate occupation X?" is under-specified. The answer depends on *which tasks* within that occupation you ask about.
+
+![Within-occupation variation](figures/06_within_occupation.png)
 
 ## Data
 
-All data downloads automatically from [Anthropic/EconomicIndex](https://huggingface.co/datasets/Anthropic/EconomicIndex) on HuggingFace.
+All data downloads automatically from [Anthropic/EconomicIndex](https://huggingface.co/datasets/Anthropic/EconomicIndex) on HuggingFace. O\*NET task statements provide the occupation mapping.
 
 The Economic Index classifies each Claude conversation into one of five collaboration modes:
 
 | Mode | Category | Description |
 |------|----------|-------------|
-| Directive | Automation | AI executes autonomously |
+| Directive | Automation | Human gives instructions, accepts output |
 | Feedback loop | Automation | AI-driven iteration with minimal human input |
 | Task iteration | Augmentation | Human iterates on AI drafts |
 | Validation | Augmentation | Human checks AI output |
 | Learning | Augmentation | Human learns from AI |
 
-Four releases span March 2025 to March 2026. The January and March 2026 releases add per-task continuous measures (AI autonomy, education years, success rates) beyond the original collaboration mode shares. We primarily use the March 2026 release for the task-level analysis and all four releases for the collaboration mode panel. O\*NET task statements provide the occupation mapping; BLS provides wage data.
+**Automation share** = directive + feedback loop share of a task's conversations.
+
+Four releases span March 2025 to March 2026. The March 2026 release adds 34 per-task facets (AI autonomy scores, education year estimates, success rates) beyond collaboration modes. We use the March 2026 release for all cross-sectional analysis.
 
 ## Limitations
 
 - **Single platform.** All data is from Claude. Patterns may differ on other AI systems.
-- **Observational.** We document associations between task characteristics and collaboration mode usage. We do not claim these are causal.
-- **Task classification is coarse.** Categorizing tasks by their leading verb is a rough heuristic. It works well enough to reveal the output-type pattern but misclassifies some tasks.
+- **Observational.** We document associations, not causal effects.
+- **Task classification is coarse.** Categorizing tasks by their leading verb is a rough heuristic.
 - **12-month window.** These patterns may shift as AI capabilities and user behavior evolve.
 
 ## Reproducing
@@ -62,15 +76,14 @@ jupyter nbconvert --execute notebooks/03_task_level_analysis.ipynb --to notebook
 
 ```
 notebooks/
-  01_data_acquisition.ipynb     Data download and structure
+  01_data_acquisition.ipynb     Data download and construction
   02_skill_compression.ipynb    Output type vs. education as predictors
   03_task_level_analysis.ipynb  Platform gap and within-occupation variation
 src/
   data.py                       Data pipeline
   features.py                   Feature engineering
-  model.py                      Predictive models
 ```
 
 ## License
 
-MIT. Underlying data provided by Anthropic, O\*NET, and BLS under their respective terms.
+MIT. Underlying data provided by Anthropic and O\*NET under their respective terms.
