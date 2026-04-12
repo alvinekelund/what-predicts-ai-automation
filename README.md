@@ -1,4 +1,4 @@
-# What Predicts AI Automation? Not What You'd Think.
+# What Predicts AI Automation?
 
 **What determines whether people use AI as an autonomous tool or as a collaborator?**
 
