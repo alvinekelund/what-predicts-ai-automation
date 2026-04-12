@@ -1,4 +1,4 @@
-# The Jagged Adoption Frontier
+# What Predicts AI Automation? Not What You'd Think.
 
 **What determines whether people use AI as an autonomous tool or as a collaborator?**
 
@@ -28,11 +28,6 @@ The model is the same. What changes is the deployment context. When a task is em
 
 ![Platform gap](figures/05_platform_gap.png)
 
-### 3. Jobs don't automate. Tasks do.
-
-Occupation-level analysis hides the structure that matters. Take Word Processors and Typists — a single occupation. Its 10 tasks range from "answer telephones" at 0% automation to "use data entry devices" at 78%. The automated tasks produce artifacts (data entry, transcription, compiling reports). The non-automated tasks involve people (answering phones, making copies).
-
-This isn't an outlier. Among 319 occupations with 5+ tasks, the median within-occupation range in AI autonomy is 0.64 points on a 1–5 scale. Asking "will AI automate this job?" averages over exactly the variation that determines the answer.
 
 ## Data
 
