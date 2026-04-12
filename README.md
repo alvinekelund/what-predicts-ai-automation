@@ -30,7 +30,7 @@ The model is the same. What changes is the deployment context. When a task is em
 
 ### 3. "Will AI automate this job?" is the wrong question
 
-The chart below shows two occupations. In each, some tasks are heavily automated (red) and others barely touched (blue) — within the same job title. Word Processors and Typists ranges from "answer telephones" at 3% automation to "use data entry devices" at 71%. First-Line Supervisors ranges from "analyze financial activities" at 7% to "compute figures such as balances and totals" at 78%.
+The chart below shows a single occupation: Word Processors and Typists. Its 10 tasks range from "answer telephones" at 0% automation to "use data entry devices" at 78% — within the same job title. The automated tasks produce artifacts (data entry, transcription, compiling reports). The non-automated tasks involve people (answering phones, making copies).
 
 This pattern holds broadly: among 319 occupations with 5+ tasks, the median within-occupation range in AI autonomy is 0.64 points on a 1–5 scale. The right unit of analysis is the task, not the occupation.
 
