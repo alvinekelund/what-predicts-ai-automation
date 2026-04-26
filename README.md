@@ -57,8 +57,8 @@ Four releases span March 2025 to March 2026. The March 2026 release adds 34 per-
 ## Reproducing
 
 ```bash
-git clone https://github.com/alvinekelund/AI-vin-Index.git
-cd AI-vin-Index
+git clone https://github.com/alvinekelund/JobAutomation.git
+cd JobAutomation
 pip install -r requirements.txt
 jupyter nbconvert --execute notebooks/01_data_acquisition.ipynb --to notebook
 jupyter nbconvert --execute notebooks/02_skill_compression.ipynb --to notebook
